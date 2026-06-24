@@ -1,4 +1,4 @@
-// notification-app-fe/src/api/notifications.js
+
 import { customLogger } from '../../../logging-middleware/logger';
 
 export async function fetchNotifications({ page = 1, limit = 10, filterType = '' } = {}) {
