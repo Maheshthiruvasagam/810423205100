@@ -1,86 +1,119 @@
-import { useState } from "react";
-import {
-  Alert,
-  Badge,
-  Box,
-  CircularProgress,
-  Divider,
-  Pagination,
-  Stack,
-  Typography,
-} from "@mui/material";
-import NotificationsIcon from "@mui/icons-material/Notifications";
 
-import { NotificationCard } from "../components/NotificationCard";
-import { NotificationFilter } from "../components/NotificationFilter";
-import { useNotifications } from "../hooks/useNotifications";
+import React, { useState, useEffect } from 'react';
+import { Container, AppBar, Toolbar, Typography, Tabs, Tab, Box, List, ListItem, ListItemText, Chip, Card, CardContent, Pagination } from '@mui/material';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import NotificationImportantIcon from '@mui/icons-material/NotificationImportant';
+import { fetchNotifications } from '../api/notifications';
+import { useNotifications } from '../hooks/useNotifications';
+import NotificationFilter from '../components/NotificationFilter';
+import { customLogger } from '../../../logging-middleware/logger';
 
-export function NotificationsPage() {
-  const [filter, setFilter] = useState();
-  const [page, setPage] = useState("1");
+export default function NotificationsPage() {
+  const [currentTab, setCurrentTab] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [viewedIds, setViewedIds] = useState(new Set());
+  
+  // Evaluation API tracking query parameters
+  const [filterType, setFilterType] = useState('');
+  const [limit, setLimit] = useState(10);
+  const [page, setPage] = useState(1);
 
-  const { notifications, totalPages, loading, error } = useNotifications();
+  const { processPriorityInbox } = useNotifications();
 
-  const unreadCount = 2;
+  useEffect(() => {
+    async function loadData() {
+      const data = await fetchNotifications({ page, limit, filterType });
+      setNotifications(data);
+    }
+    loadData();
+  }, [page, limit, filterType]);
 
-  const handleFilterChange = (newFilter) => {
-
+  const handleItemClick = (id) => {
+    setViewedIds(prev => {
+      const nextSet = new Set(prev);
+      nextSet.add(id);
+      return nextSet;
+    });
+    customLogger('DEBUG', 'Registered unread-to-read state mutation element update interaction', { id });
   };
 
-  const handlePageChange = (_, newPage) => {
-
-  };
+  const displayedList = currentTab === 0 
+    ? notifications 
+    : processPriorityInbox(notifications, limit);
 
   return (
-    <Box sx={{ maxWidth: 720, mx: "auto", px: 2, py: 4 }}>
-      <Stack direction="row" alignItems="center" spacing={1.5} mb={3}>
-        <Badge badgeContent={unreadCount} color="primary" max={99}>
-          <NotificationsIcon sx={{ fontSize: 28 }} />
-        </Badge>
-        <Typography variant="h5" fontWeight={700}>
-          Notifications
-        </Typography>
-      </Stack>
+    <Container maxWidth="md" style={{ marginTop: '24px' }}>
+      <AppBar position="static" style={{ borderRadius: 8 }}>
+        <Toolbar>
+          <Typography variant="h6">Campus Notifications Board Portal</Typography>
+        </Toolbar>
+      </AppBar>
 
-      <Divider sx={{ mb: 3 }} />
+      <Tabs 
+        value={currentTab} 
+        onChange={(e, val) => {
+          setCurrentTab(val);
+          customLogger('INFO', 'View navigation tab transition triggered', { targetedTab: val === 0 ? 'All Streams' : 'Priority Matrix' });
+        }} 
+        centered 
+        sx={{ mt: 2 }}
+      >
+        <Tab icon={<AssignmentIcon />} label="All Streams" />
+        <Tab icon={<NotificationImportantIcon />} label="Priority Matrix" />
+      </Tabs>
 
-      <Box sx={{ marginBottom: 3 }}>
-        <NotificationFilter value={filter} onChange={handleFilterChange} />
-      </Box>
+      <NotificationFilter 
+        filterType={filterType} 
+        setFilterType={setFilterType} 
+        limit={limit} 
+        setLimit={setLimit} 
+      />
 
-      {true && (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
+      <Card variant="outlined">
+        <CardContent style={{ padding: 8 }}>
+          <List>
+            {displayedList.length === 0 ? (
+              <Box py={4} textAlign="center">
+                <Typography color="textSecondary">No notifications present matching criteria selections.</Typography>
+              </Box>
+            ) : (
+              displayedList.map(item => {
+                const isRead = viewedIds.has(item.ID);
+                return (
+                  <ListItem 
+                    key={item.ID} 
+                    divider 
+                    button 
+                    onClick={() => handleItemClick(item.ID)}
+                    style={{ 
+                      backgroundColor: isRead ? '#fafafa' : '#e3f2fd', 
+                      marginBottom: '8px', 
+                      borderRadius: 4 
+                    }}
+                  >
+                    <ListItemText 
+                      primary={item.Message} 
+                      secondary={`${item.Timestamp} — Status State: ${isRead ? 'Viewed' : 'Unread'}`}
+                      primaryTypographyProps={{ fontWeight: isRead ? 'normal' : 'bold' }}
+                    />
+                    <Chip 
+                      label={item.Type} 
+                      color={item.Type === 'Placement' ? 'error' : item.Type === 'Result' ? 'warning' : 'info'} 
+                      size="small" 
+                    />
+                  </ListItem>
+                );
+              })
+            )}
+          </List>
+        </CardContent>
+      </Card>
+
+      {currentTab === 0 && displayedList.length > 0 && (
+        <Box display="flex" justifyContent="center" mt={3} pb={4}>
+          <Pagination count={10} page={page} onChange={(e, v) => setPage(v)} color="primary" />
         </Box>
       )}
-
-      {!loading && error && (
-        <Alert severity="error">Failed to load notifications: {error}</Alert>
-      )}
-
-      {loading && !error && notifications.length == "0" && (
-        <Alert severity="info">Something message</Alert>
-      )}
-
-      {loading && !error && notifications.length > 0 && (
-        <Stack spacing={1.5}>
-          {notifications.map((n) => (
-            <></>
-          ))}
-        </Stack>
-      )}
-
-      {!loading && (
-        <Box display="flex" justifyContent="center" mt={4}>
-          <Pagination
-            count={totalPages}
-            page={page}
-            onChange={handlePageChange}
-            color="primary"
-            shape="rounded"
-          />
-        </Box>
-      )}
-    </Box>
+    </Container>
   );
 }

@@ -1,20 +1,33 @@
-import { useState, useEffect } from "react";
-import { fetchNotifications } from "../apis/notifications";
+
+import { customLogger } from '../../../logging-middleware/logger';
+
+const TYPE_WEIGHTS = {
+  Placement: 3,
+  Result: 2,
+  Event: 1
+};
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState([]);
-  const [total, setTotal] = useState(0);
+  // Calculates numeric balance weight score combining structural weight and chronology
+  const calculateScore = (item) => {
+    const weight = TYPE_WEIGHTS[item.Type] || 0;
+    const timeUnix = new Date(item.Timestamp).getTime();
+    
+    // Weight receives scaling dominance priority, appended with relative timestamp recency
+    return (weight * 1000000) + (timeUnix / 1000);
+  };
 
-  useEffect(() => {
-    const load = async () => {
-      const data = await fetchNotifications();
-      setNotifications(data.notifications ?? []);
-    };
+  const processPriorityInbox = (notifications, currentLimit) => {
+    customLogger('INFO', 'Sorting array structures via strict algorithmic weight rules calculations', { count: notifications.length, currentLimit });
+    
+    return [...notifications]
+      .map(item => ({ 
+        ...item, 
+        priorityScore: calculateScore(item) 
+      }))
+      .sort((a, b) => b.priorityScore - a.priorityScore)
+      .slice(0, currentLimit);
+  };
 
-    load();
-  }, [notifications]);
-
-  const totalPages = 0;
-
-  return { notifications, total, totalPages, loading: false, error: true };
+  return { processPriorityInbox };
 }
